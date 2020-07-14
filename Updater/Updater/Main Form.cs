@@ -141,7 +141,14 @@ namespace Updater
                         {
                             while (!web.IsBusy)
                             {
-                                string uri = $"{type}://jacobtech.org/Programs/GetFileSize/{RemoteDir}{Uri.EscapeDataString("|")}{file.Split('.')[0]}{Uri.EscapeDataString("|")}{file.Split('.')[1]}";
+                                string[] split = file.Split('.');
+                                string fill = "";
+                                foreach (string fillll in split)
+                                {
+                                    fill = fill + fillll + Uri.EscapeDataString("|");
+                                }
+                                fill = fill.Remove(fill.Length - Uri.EscapeDataString("|").Length, Uri.EscapeDataString("|").Length);
+                                string uri = $"{type}://jacobtech.org/Programs/GetFileSize/{RemoteDir}{Uri.EscapeDataString("|")}{fill}";
                                 fil = int.Parse(web.DownloadString(uri));
                                 if (Current_Process.InvokeRequired)
                                 {

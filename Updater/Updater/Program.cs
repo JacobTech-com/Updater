@@ -14,6 +14,7 @@ namespace Updater
         [STAThread]
         static void Main(string[] args)
         {
+            args = new string[] { "Calculator", "Jason%20Hub", "Jason Hub.exe" };
             if (args.Length > 2 && args.Length < 5)
             {
                 string files = null;
