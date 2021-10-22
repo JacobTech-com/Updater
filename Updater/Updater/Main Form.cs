@@ -3,45 +3,33 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Net;
-using System.Security.Cryptography.X509Certificates;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Windows.Forms;
-using System.Windows.Shell;
 
 namespace Updater
 {
     public partial class Main_Form : Form
     {
         private TaskbarManager taskbar = TaskbarManager.Instance;
+        private readonly string Domain = "www.JacobTech.com", Process_Name, RemoteDir, exe;
         private string[] Files = null;
-        private string Process_Name;
-        private string RemoteDir;
-        private string exe;
-       // private int current = 0;
-        private int before = 0;
-        private int fil = 0;
-        private int last = 0;
+        public double scale = 1, filscale = 1;
+        private ulong before = 0, fil = 0, last = 0;
 
-        public Main_Form(string Process, string Programdir, string exefile, string files)
+        public Main_Form(string Process, string Programdir, string exefile, string[] files)
         {
             InitializeComponent();
             Process_Name = Process;
-            RemoteDir = Programdir;
+            RemoteDir = Uri.EscapeDataString(Programdir);
             exe = exefile;
-            if (files != null) Files = files.Split('|');
+            if (files != null) Files = files;
         }
-
-        
 
         private void Main_Form_Shown(object sender, EventArgs e)
         {
             Current_Process.Style = ProgressBarStyle.Marquee;
             taskbar.SetProgressState(TaskbarProgressBarState.Indeterminate);
             Wait.RunWorkerAsync();
-            //Size = new System.Drawing.Size(Screen.PrimaryScreen.Bounds.Width / 2, Screen.PrimaryScreen.Bounds.Height / 2);
-            //Location = new System.Drawing.Point(Screen.PrimaryScreen.Bounds.Width / 4, Location.Y);
-            
+            Speed.Start();
         }
 
         private void ChangeProcessText(string Process)
@@ -52,9 +40,9 @@ namespace Updater
 
         private bool IsProcessOpen(string name)
         {
-            foreach (Process clsProcess in Process.GetProcessesByName(name))
+            foreach (Process clsProcess in Process.GetProcessesByName(name.ToLower()))
             {
-                if (clsProcess.ProcessName.Contains(name))
+                if (clsProcess.ProcessName.ToLower().Contains(name.ToLower()))
                 {
                     return true;
                 }
@@ -78,7 +66,7 @@ namespace Updater
 
         private void Wait_RunWorkerCompleted(object sender, System.ComponentModel.RunWorkerCompletedEventArgs e)
         {
-            Speed.Start();
+
             taskbar.SetProgressState(TaskbarProgressBarState.Normal);
             if (Current_Process.InvokeRequired) Current_Process.Invoke(new Action(() => { Current_Process.Style = ProgressBarStyle.Continuous; }));
             else Current_Process.Style = ProgressBarStyle.Continuous;
@@ -94,7 +82,8 @@ namespace Updater
             }
             Download.RunWorkerAsync();
         }
-
+        bool good = true;
+        bool downloading = true;
         private void Download_DoWork(object sender, System.ComponentModel.DoWorkEventArgs e)
         {
             using (WebClient web = new WebClient())
@@ -102,101 +91,132 @@ namespace Updater
                 string type = "https";
                 string rem = "";
                 int max;
-                
+                ulong realmax;
+
                 ChangeProcessText("Getting update info");
                 try
                 {
-                    rem = web.DownloadString($"{type}://jacobtech.org/Programs/Files/{RemoteDir}");
+                    rem = web.DownloadString($"{type}://{Domain}/Updater/Files/{RemoteDir}");
                 }
-                catch (Exception ex)
+                catch (WebException ex)
                 {
                     if (ex.Message == "Unable to connect to the remote server")
                     {
                         try
                         {
                             type = "http";
-                            rem = web.DownloadString($"{type}://jacobtech.org/Programs/Files/{RemoteDir}");
+                            rem = web.DownloadString($"{type}://{Domain}/Updater/Files/{RemoteDir}");
                         }
                         catch (Exception ex2)
                         {
                             MessageBox.Show(ex2.Message);
+                            Application.Exit();
                         }
+                    }
+                    else if (ex.Message == $"The remote name could not be resolved: '{Domain.ToLower()}'")
+                    {
+                        MessageBox.Show($"The Domain '{Domain}' is currently down.\nPlease try to update the program latter", "Sorry", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        Application.Exit();
                     }
                     else
                     {
                         MessageBox.Show(ex.Message);
+                        Application.Exit();
                     }
                 }
-
+                string uri;
                 try
                 {
-                    max = int.Parse(web.DownloadString($"{type}://jacobtech.org/Programs/GetSize/{RemoteDir}"));
+                    realmax = ulong.Parse(web.DownloadString($"{type}://{Domain}/Updater/GetSize/{RemoteDir}"));
+                    if (realmax > int.MaxValue)
+                    {
+                        scale = (double)int.MaxValue /(double)realmax;
+                        max = int.MaxValue;
+                    }
+                    else max = (int)realmax;
                     web.DownloadProgressChanged += Web_DownloadProgressChanged;
                     web.DownloadFileCompleted += Web_DownloadFileCompleted;
-                    Total_Downloaded.Invoke(new Action(() => { Total_Downloaded.Text = TotalDownloadAmmountNeat(max); }));
-                    foreach (string file in rem.Split('|'))
+                    Total_Downloaded.Invoke(new Action(() => { Total_Downloaded.Text = TotalDownloadAmountNeat(realmax); }));
+                    foreach (string file in rem.Split('\n'))
                     {
-                        bool good = true;
-                        while (good)
+                        if (string.IsNullOrEmpty(file)) return;
+                        bool f = true;
+                        while (f)
                         {
-                            while (!web.IsBusy)
+                            while (good)
                             {
-                                string[] split = file.Split('.');
-                                string fill = "";
-                                foreach (string fillll in split)
+                                while (!web.IsBusy)
                                 {
-                                    fill = fill + fillll + Uri.EscapeDataString("|");
+                                    uri = $"{type}://{Domain}/Updater/GetFileSize/{RemoteDir}/{Uri.EscapeDataString(file)}";
+                                    fil = ulong.Parse(web.DownloadString(uri));
+                                    int locfil;
+                                    filscale = 1;
+                                    if (fil > int.MaxValue)
+                                    {
+                                        locfil = int.MaxValue;
+                                        filscale = (double)int.MaxValue / (double)fil;
+                                    }
+                                    else locfil = (int)fil;
+                                    if (Current_Process.InvokeRequired)
+                                    {
+                                        Total_Progress.Invoke(new Action(() => { Total_Progress.Maximum = max; }));
+                                        string file2 = Uri.UnescapeDataString(file);
+                                        Current_Process.Invoke(new Action(() => { Current_Process.Maximum = locfil; }));
+                                    }
+                                    else
+                                    {
+                                        Total_Progress.Maximum = max;
+                                        Current_Process.Maximum = locfil;
+                                    }
+                                    string name = file.Replace("%20", " ").Replace("%28", "(").Replace("%29", ")");
+                                    Uri u = new Uri($"{type}://{Domain}/Updater/GetFile/{RemoteDir}/{Uri.EscapeDataString(file)}");
+                                    downloading = true;
+                                    ChangeProcessText($"Downloading {name}");
+                                    good = false;
+                                    web.DownloadFileAsync(u, name);
+                                    break;
                                 }
-                                fill = fill.Remove(fill.Length - Uri.EscapeDataString("|").Length, Uri.EscapeDataString("|").Length);
-                                string uri = $"{type}://jacobtech.org/Programs/GetFileSize/{RemoteDir}{Uri.EscapeDataString("|")}{fill}";
-                                fil = int.Parse(web.DownloadString(uri));
-                                if (Current_Process.InvokeRequired)
-                                {
-                                    Total_Progress.Invoke(new Action(() => { Total_Progress.Maximum = max; }));
-                                    string file2 = Uri.UnescapeDataString(file);
-                                    Current_Process.Invoke(new Action(() => { Current_Process.Maximum = int.Parse(web.DownloadString(uri)); }));
-                                }
-                                else
-                                {
-                                    Total_Progress.Maximum = max;
-                                    Current_Process.Maximum = int.Parse(web.DownloadString(uri));
-                                }
-                                string name = file.Replace("%20", " ").Replace("%28", "(").Replace("%29", ")");
-                                Uri u = new Uri($"{type}://jacobtech.org/Programs/{RemoteDir}/Files/{file}");
-                                ChangeProcessText($"Downloading {name}");
-                                web.DownloadFileAsync(u, name);
-                                good = false;
-                                break;
+                                f = false;
                             }
                         }
-                        
                     }
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show(ex.Message);
+                    MessageBox.Show(ex.ToString());
                 }
             }
         }
 
         private void Web_DownloadFileCompleted(object sender, System.ComponentModel.AsyncCompletedEventArgs e)
         {
-            before = before + fil;
+            downloading = false;
+            before += fil;
+            good = true;
         }
 
         private void Web_DownloadProgressChanged(object sender, DownloadProgressChangedEventArgs e)
         {
+            ulong ctemp = (ulong)Math.Round((ulong)e.BytesReceived * filscale, 0);
+            if (ctemp > int.MaxValue) ctemp = int.MaxValue;
+            int ctol = (int)ctemp;
+            ulong total = before + (ulong)e.BytesReceived;
+            ulong temp = (ulong)Math.Round(total * scale, 0);
+            if (temp > int.MaxValue) temp = int.MaxValue;
+            int tol = (int)temp;
             if (Current_Process.InvokeRequired)
             {
-                Current_Process.Invoke(new Action(() => { Current_Process.Value = int.Parse(e.BytesReceived.ToString()); }));
-                Total_Progress.Invoke(new Action(() => { Total_Progress.Value = before + int.Parse(e.BytesReceived.ToString()); }));
-                Total_Downloaded.Invoke(new Action(() => { Total_Downloaded.Text = Downloaded_Amount_Neat(Total_Progress.Value, Total_Downloaded.Text); }));
+                Current_Process.Invoke(new Action(() => { Current_Process.Value = ctol; }));
+                if (tol > Total_Progress.Maximum) tol = Total_Progress.Maximum;
+                Total_Progress.Invoke(new Action(() => { Total_Progress.Value = tol; }));
+                Total_Downloaded.Invoke(new Action(() => { Total_Downloaded.Text = Downloaded_Amount_Neat(total, Total_Downloaded.Text); }));
             }
             else
             {
-                Current_Process.Value = int.Parse(e.BytesReceived.ToString());
-                Total_Progress.Value = before + int.Parse(e.BytesReceived.ToString());
-                Total_Downloaded.Text = Downloaded_Amount_Neat(Total_Progress.Value, Total_Downloaded.Text);
+                Current_Process.Value = ctol;
+                if (tol > Total_Progress.Maximum) tol = Total_Progress.Maximum;
+                Total_Progress.Value = tol;
+                Total_Downloaded.Text = Downloaded_Amount_Neat(total, Total_Downloaded.Text);
             }
             taskbar.SetProgressValue(Total_Progress.Value, Total_Progress.Maximum);
         }
@@ -260,7 +280,7 @@ namespace Updater
             return text;
         }
 
-        private string TotalDownloadAmmountNeat(double Number)
+        private string TotalDownloadAmountNeat(double Number)
         {
             string Output;
             int Exponet;
@@ -289,19 +309,31 @@ namespace Updater
 
         private void Speed_Tick(object sender, EventArgs e)
         {
-            double BitesPertenthSec = Total_Progress.Value - last;
-            last = Total_Progress.Value;
-            Transfer_Speed.Text = Download_Speed_Neat(BitesPertenthSec * 10);
+            ulong BitesPertenthSec = ((ulong)Math.Round(Total_Progress.Value/scale, 0)) - last;
+            last = ((ulong)Math.Round(Total_Progress.Value / scale, 0));
+            Transfer_Speed.Text = Download_Speed_Neat(BitesPertenthSec);
         }
 
         private void Download_RunWorkerCompleted(object sender, System.ComponentModel.RunWorkerCompletedEventArgs e)
         {
-            Speed.Stop();
-            Process p = new Process();
-            p.StartInfo.FileName = exe;
-            p.StartInfo.WindowStyle = ProcessWindowStyle.Normal;
-            p.Start();
-            Application.Exit();
+            Start.RunWorkerAsync();
+        }
+
+        private void Start_DoWork(object sender, System.ComponentModel.DoWorkEventArgs e)
+        {
+            bool good = true;
+            while (good)
+            {
+                if (!downloading)
+                {
+                    good = false;
+                    Process p = new Process();
+                    p.StartInfo.FileName = exe;
+                    p.StartInfo.WindowStyle = ProcessWindowStyle.Normal;
+                    p.Start();
+                    Application.Exit();
+                }
+            }
         }
     }
 }

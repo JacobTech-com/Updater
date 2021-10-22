@@ -16,6 +16,7 @@
     <NuGetPackageImportStamp>
     </NuGetPackageImportStamp>
     <IsWebBootstrapper>false</IsWebBootstrapper>
+    <TargetFrameworkProfile />
     <PublishUrl>ftp://192.168.1.211/</PublishUrl>
     <Install>true</Install>
     <InstallFrom>Disk</InstallFrom>

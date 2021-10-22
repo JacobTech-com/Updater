@@ -14,19 +14,12 @@ namespace Updater
         [STAThread]
         static void Main(string[] args)
         {
-            args = new string[] { "Calculator", "Jason%20Hub", "Jason Hub.exe" };
-            if (args.Length > 2 && args.Length < 5)
+            if (args == null || args.Length == 0) args = new string[] { "", "Luski", "Luski.exe" };
+            if (args.Length > 2)
             {
-                string files = null;
-                if (args.Length > 3) files = args[3];
-                string[] info = new string[4] { args[0], args[1], args[2], files };
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
-                Application.Run(new Main_Form(info[0], info[1], info[2], info[3]));
-            }
-            else if (args.Length > 4)
-            {
-                MessageBox.Show("To many arguments were given");
+                Application.Run(new Main_Form(args[0], args[1], args[2], args.Skip(3).ToArray()));
             }
             else
             {
